@@ -1,0 +1,59 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.history/
+
+# JetBrains Rider / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build output
+[Bb]in/
+[Oo]bj/
+out/
+publish/
+artifacts/
+
+# Logs
+*.log
+logs/
+
+# .NET
+*.pidb
+*.svclog
+_ReSharper*/
+*.[Rr]e[Ss]harper
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+*.nuget.props
+*.nuget.targets
+
+# Generated files
+wwwroot/lib/
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# User secrets / local settings (if present)
+appsettings.Development.json
+secrets.json
+
+# Coverage / test output
+TestResult*/
+coverage/
+*.coverage*
