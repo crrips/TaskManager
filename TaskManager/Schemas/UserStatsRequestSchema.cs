@@ -1,6 +1,6 @@
 namespace TaskManager.Schemas;
 
-public class UserStatsSchema
+public class UserStatsRequestSchema
 {
     public int TotalTasks { get; set; }
     public int CompletedTasks { get; set; }

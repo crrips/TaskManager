@@ -10,90 +10,83 @@ namespace TaskManager.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class TagsController : ControllerBase
+public class TagsController(AppDbContext db) : AuthorizedController
 {
-    private readonly AppDbContext _db;
-
-    public TagsController(AppDbContext db)
-    {
-        _db = db;
-    }
-
     [HttpPost("CreateTag")]
-    public async Task<ActionResult<TagSchema>> Create(CreateTagSchema schema)
+    public async Task<ActionResult> Create([FromBody] CreateTagRequestSchema schema)
     {
         var tag = new Tag { Name = schema.Name };
-        _db.Tags.Add(tag);
-        await _db.SaveChangesAsync();
+        db.Tags.Add(tag);
+        await db.SaveChangesAsync();
 
-        return Ok(new TagSchema { Id = tag.Id, Name = tag.Name });
+        return Ok(new { Id = tag.Id, Name = tag.Name });
     }
     
-    [HttpPost("DeleteTag/{id}")]
-    public async Task<IActionResult> Delete(int id)
+    [HttpPost("DeleteTag")]
+    public async Task<IActionResult> Delete([FromBody] int id)
     {
-        var tag = await _db.Tags.FirstOrDefaultAsync(t => t.Id == id);
+        var tag = await db.Tags.FirstOrDefaultAsync(t => t.Id == id);
         if (tag == null) return NotFound();
         
-        _db.Tags.Remove(tag);
-        await _db.SaveChangesAsync();
+        db.Tags.Remove(tag);
+        await db.SaveChangesAsync();
         return Ok();
     }
 
     [HttpPost("GetAllTags")]
-    public async Task<ActionResult<List<TagSchema>>> GetAll()
+    public async Task<ActionResult> GetAll()
     {
-        var tags = await _db.Tags
-            .Select(t => new TagSchema
+        var tags = await db.Tags
+            .Select(t => new
             {
-                Id = t.Id,
-                Name = t.Name
+                t.Id,
+                t.Name
             })
             .ToListAsync();
 
         return Ok(tags);
     }
     
-    [HttpPost("{tagId}/AddTaskToTag/{taskId}")]
-    public async Task<IActionResult> AddTaskToTag(int tagId, int taskId)
+    [HttpPost("AddTaskToTag")]
+    public async Task<IActionResult> AddTaskToTag([FromBody] AddTaskToTagRequestSchema schema)
     {
-        var tag = await _db.Tags
+        var tag = await db.Tags
             .Include(t => t.Tasks)
-            .FirstOrDefaultAsync(t => t.Id == tagId);
+            .FirstOrDefaultAsync(t => t.Id == schema.TagId);
 
         if (tag == null)
             return NotFound("Tag not found");
 
-        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == taskId);
+        var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == schema.TaskId);
         if (task == null)
             return NotFound("Task not found");
 
         if (!tag.Tasks.Contains(task))
             tag.Tasks.Add(task);
 
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
         return Ok();
     }
 
 
-    [HttpPost("{tagId}/RemoveTaskFromTag/{taskId}")]
-    public async Task<IActionResult> RemoveTaskFromTag(int tagId, int taskId)
+    [HttpPost("RemoveTaskFromTag")]
+    public async Task<IActionResult> RemoveTaskFromTag([FromBody] RemoveTaskFromTagRequestSchema schema)
     {
-        var tag = await _db.Tags
+        var tag = await db.Tags
             .Include(t => t.Tasks)
-            .FirstOrDefaultAsync(t => t.Id == tagId);
+            .FirstOrDefaultAsync(t => t.Id == schema.TagId);
 
         if (tag == null)
             return NotFound("Tag not found");
 
-        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == taskId);
+        var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == schema.TaskId);
         if (task == null)
             return NotFound("Task not found");
 
         if (tag.Tasks.Contains(task))
             tag.Tasks.Remove(task);
 
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync();
         return Ok();
     }
 }

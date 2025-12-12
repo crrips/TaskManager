@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Cryptography;
-using System.Text;
 using TaskManager.Data;
 using TaskManager.Models;
 using TaskManager.Services;
@@ -10,52 +8,36 @@ using TaskManager.Schemas;
 namespace TaskManager.Controllers;
 
 [ApiController]
-[Route("api/Auth")]
-public class AuthController : ControllerBase
+[Route("api/[controller]")]
+public class AuthController(AppDbContext db, ITokenService tokenService, IHashService hashService) : ControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly ITokenService _tokenService;
-
-    public AuthController(AppDbContext db, ITokenService tokenService)
-    {
-        _db = db;
-        _tokenService = tokenService;
-    }
-
     [HttpPost("Register")]
-    public async Task<IActionResult> Register([FromBody] UserRegisterSchema schema)
+    public async Task<IActionResult> Register([FromBody] UserRegisterRequestSchema schema)
     {
-        if (await _db.Users.AnyAsync(u => u.Username == schema.Username))
+        if (await db.Users.AnyAsync(u => EF.Functions.Like(u.Username, schema.Username)))
             return BadRequest("Username already exists");
 
         var user = new User
         {
             Username = schema.Username,
-            PasswordHash = Hash(schema.Password)
+            PasswordHash = hashService.Hash(schema.Password)
         };
 
-        _db.Users.Add(user);
-        await _db.SaveChangesAsync();
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
 
         return Ok(new { user.Id, user.Username });
     }
 
     [HttpPost("Login")]
-    public async Task<IActionResult> Login([FromBody] UserLoginSchema schema)
+    public async Task<IActionResult> Login([FromBody] UserLoginRequestSchema schema)
     {
-        var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == schema.Username);
-        if (user == null || user.PasswordHash != Hash(schema.Password))
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Username == schema.Username);
+        if (user == null || user.PasswordHash != hashService.Hash(schema.Password))
             return Unauthorized("Invalid credentials");
 
-        var token = _tokenService.GenerateToken(user);
+        var token = tokenService.GenerateToken(user);
 
-        return Ok(new AuthResponseSchema { Token = token });
-    }
-
-    private static string Hash(string input)
-    {
-        using var sha = SHA256.Create();
-        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(input));
-        return Convert.ToHexString(bytes);
+        return Ok(new { Token = token });
     }
 }

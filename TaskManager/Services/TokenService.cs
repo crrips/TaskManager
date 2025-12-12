@@ -6,15 +6,8 @@ using TaskManager.Models;
 
 namespace TaskManager.Services;
 
-public class TokenService : ITokenService
+public class TokenService(IConfiguration config) : ITokenService
 {
-    private readonly IConfiguration _config;
-
-    public TokenService(IConfiguration config)
-    {
-        _config = config;
-    }
-
     public string GenerateToken(User user)
     {
         var claims = new[]
@@ -24,13 +17,13 @@ public class TokenService : ITokenService
         };
 
         var key = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(_config["Jwt:Key"]!)
+            Encoding.UTF8.GetBytes(config["Jwt:Key"]!)
         );
 
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(
-            issuer: _config["Jwt:Issuer"],
+            issuer: config["Jwt:Issuer"],
             audience: null,
             claims: claims,
             expires: DateTime.UtcNow.AddHours(10),
@@ -39,9 +32,4 @@ public class TokenService : ITokenService
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
-}
-
-public interface ITokenService
-{
-    string GenerateToken(User user);
 }

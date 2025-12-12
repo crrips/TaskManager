@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using TaskManager.Data;
 using TaskManager.Schemas;
 
@@ -11,41 +9,30 @@ namespace TaskManager.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class StatsController : ControllerBase
+public class StatsController(AppDbContext db) : AuthorizedController
 {
-    private readonly AppDbContext _db;
-
-    public StatsController(AppDbContext db)
-    {
-        _db = db;
-    }
-
-    private int UserId => int.Parse(
-        User.FindFirstValue(JwtRegisteredClaimNames.Sub) ??
-        User.FindFirstValue(ClaimTypes.NameIdentifier)!
-    );
-
     [HttpPost("GetUserStats")]
-    public async Task<ActionResult<UserStatsSchema>> GetUserStats()
+    public async Task<ActionResult> GetUserStats([FromBody] UserStatsRequestSchema schema)
     {
-        var tasks = await _db.Tasks
+        var tasks = await db.Tasks
             .Where(t => t.UserId == UserId)
             .ToListAsync();
 
         if (tasks.Count == 0)
         {
-            return new UserStatsSchema
+            var emptyTasks = new
             {
                 TotalTasks = 0,
                 CompletedTasks = 0,
                 CompletionRate = 0,
             };
+            return Ok(emptyTasks);
         }
 
         var total = tasks.Count;
         var completed = tasks.Count(t => t.IsCompleted);
 
-        var stats = new UserStatsSchema
+        var stats = new
         {
             TotalTasks = total,
             CompletedTasks = completed,

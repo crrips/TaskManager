@@ -1,8 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using TaskManager.Data;
 using TaskManager.Models;
 using TaskManager.Schemas;
@@ -12,36 +10,31 @@ namespace TaskManager.Controllers;
 [ApiController]
 [Route("api/Tasks")]
 [Authorize]
-public class TasksController : ControllerBase
+public class TasksController(AppDbContext db) : AuthorizedController
 {
-    private readonly AppDbContext _db;
-    public TasksController(AppDbContext db) => _db = db;
-
-    private int UserId => int.Parse(
-        User.FindFirstValue(JwtRegisteredClaimNames.Sub) ??
-        User.FindFirstValue(ClaimTypes.NameIdentifier)!
-    );
-
     [HttpPost("GetMyTasks")]
-    public async Task<IActionResult> GetMyTasks()
+    public async Task<IActionResult> GetMyTasks(CancellationToken ct)
     {
-        var tasks = await _db.Tasks
+        var tasks = await db.Tasks
             .Where(t => t.UserId == UserId)
-            .Select(t => new TaskResponseSchema
+            .AsNoTracking()
+            .Select(t => new
             {
-                Id = t.Id,
-                Title = t.Title,
-                Description = t.Description,
-                IsCompleted = t.IsCompleted
+                t.Id,
+                t.Title,
+                t.Description,
+                t.IsCompleted
             })
-            .ToListAsync();
+            .ToListAsync(ct);
 
         return Ok(tasks);
     }
-
+    
     [HttpPost("CreateTask")]
-    public async Task<IActionResult> Create(TaskCreateSchema schema)
+    public async Task<IActionResult> Create(TaskCreateRequestSchema schema, CancellationToken ct)
     {
+        await using var trx = await db.Database.BeginTransactionAsync(ct);
+
         var task = new TaskItem
         {
             Title = schema.Title,
@@ -49,47 +42,75 @@ public class TasksController : ControllerBase
             UserId = UserId
         };
 
-        _db.Tasks.Add(task);
-        await _db.SaveChangesAsync();
+        db.Tasks.Add(task);
 
-        return Ok(new TaskResponseSchema
+        await db.SaveChangesAsync(ct);
+
+        await trx.CommitAsync(ct);
+
+        return Ok(new
         {
-            Id = task.Id,
-            Title = task.Title,
-            Description = task.Description,
-            IsCompleted = task.IsCompleted
+            task.Id,
+            task.Title,
+            task.Description,
+            task.IsCompleted
         });
     }
-
-    [HttpPost("UpdateTask/{id}")]
-    public async Task<IActionResult> Update(int id, TaskUpdateSchema schema)
+    
+    [HttpPost("UpdateTask")]
+    public async Task<IActionResult> Update([FromBody] TaskUpdateRequestSchema schema, CancellationToken cancellationToken)
     {
-        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(3000);
+
+        var ct = cts.Token;
+
+        var task = await db.Tasks.FirstOrDefaultAsync(t => t.Id == schema.Id && t.UserId == UserId, ct);
         if (task == null) return NotFound();
 
         task.Title = schema.Title;
         task.Description = schema.Description;
         task.IsCompleted = schema.IsCompleted;
 
-        await _db.SaveChangesAsync();
+        await db.SaveChangesAsync(ct);
 
-        return Ok(new TaskResponseSchema
+        return Ok(new
         {
-            Id = task.Id,
-            Title = task.Title,
-            Description = task.Description,
-            IsCompleted = task.IsCompleted
+            task.Id,
+            task.Title,
+            task.Description,
+            task.IsCompleted
         });
     }
-
-    [HttpPost("DeleteTask/{id}")]
-    public async Task<IActionResult> Delete(int id)
+    
+    [HttpPost("DeleteTask")]
+    public async Task<IActionResult> Delete([FromBody] int id, CancellationToken ct)
     {
-        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId);
-        if (task == null) return NotFound();
+        await using var trx = await db.Database.BeginTransactionAsync(ct);
 
-        _db.Tasks.Remove(task);
-        await _db.SaveChangesAsync();
-        return Ok();
+        var task = await db.Tasks
+            .FirstOrDefaultAsync(t => t.Id == id && t.UserId == UserId, ct);
+
+        if (task == null)
+            return NotFound();
+
+        if (!task.IsCompleted)
+        {
+            task.IsCompleted = true;
+            await db.SaveChangesAsync(ct);
+
+            await trx.CommitAsync(ct);
+
+            return Ok(new { status = "completed" });
+        }
+        else
+        {
+            db.Tasks.Remove(task);
+            await db.SaveChangesAsync(ct);
+
+            await trx.CommitAsync(ct);
+
+            return Ok(new { status = "deleted" });
+        }
     }
 }
